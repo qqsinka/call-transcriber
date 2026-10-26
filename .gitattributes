@@ -1,0 +1,5 @@
+# Сервис работает в Linux/WSL: храним и выкладываем текстовые файлы с LF, иначе .sh не запустятся
+* text=auto eol=lf
+*.mp3 binary
+*.m4a binary
+*.ogg binary

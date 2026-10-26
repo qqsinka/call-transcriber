@@ -1,0 +1,11 @@
+# torch/torchaudio ставятся отдельно (make install), чтобы выбрать сборку CPU или CUDA:
+#   CPU:  --index-url https://download.pytorch.org/whl/cpu
+#   CUDA: --index-url https://download.pytorch.org/whl/cu126
+gigaam @ git+https://github.com/salute-developers/GigaAM@7447938d791c4f3e643386ee22c33777004293a5
+silero-vad==6.2.3
+fastapi==0.157.0
+uvicorn[standard]==0.54.0
+python-multipart
+httpx
+python-dotenv
+pytest
