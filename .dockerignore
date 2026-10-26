@@ -1,0 +1,5 @@
+# в образ — только код сервиса; записи звонков, данные и окружения не нужны
+*
+!transcriber/
+transcriber/**/__pycache__
+transcriber/**/*.pyc

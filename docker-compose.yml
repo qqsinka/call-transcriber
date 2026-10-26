@@ -1,0 +1,73 @@
+# Транскрибация звонков: сервис + локальная LLM (Ollama).
+#
+#   cp .env.example .env      # логин/пароль API, модель, параметры
+#   make docker-up            # = docker compose up -d --build
+#
+# С видеокартой NVIDIA: make docker-up-gpu (добавляет docker-compose.gpu.yml).
+# Данные на хосте: ./data (очередь jobs.db, словарь автозамен), ./inbox (папка автоприёма записей).
+
+# имя задано явно: по умолчанию compose берёт его из имени папки, а в кириллическом имени оно получается пустым
+name: call-transcriber
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  transcriber:
+    build:
+      context: .
+      args:
+        PRELOAD_MODELS: ${PRELOAD_MODELS:-0}
+    image: call-transcriber:latest
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # пути внутри контейнера и адрес LLM фиксированы — значения из .env для локального запуска их не перебивают
+      DATA_DIR: /app/data
+      MODEL_DIR: /opt/models
+      INBOX_DIR: /inbox
+      LLM_URL: ${DOCKER_LLM_URL:-http://ollama:11434}
+    ports:
+      - "${PORT:-8000}:8000"
+    volumes:
+      - ./data:/app/data
+      - ./inbox:/inbox
+      - models:/opt/models
+    depends_on:
+      ollama:
+        condition: service_healthy
+    logging: *logging
+
+  ollama:
+    image: ollama/ollama:${OLLAMA_VERSION:-latest}
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+    # наружу не публикуется: LLM доступна только сервису транскрибации
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    logging: *logging
+
+  # одноразово скачивает LLM в том ollama (6.5 ГБ, только при первом запуске; дальше — из кэша)
+  ollama-pull:
+    image: ollama/ollama:${OLLAMA_VERSION:-latest}
+    entrypoint: ["ollama", "pull", "${LLM_MODEL:-hf.co/ai-sage/GigaChat3.1-10B-A1.8B-GGUF:Q4_K_M}"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+    logging: *logging
+
+volumes:
+  models:   # веса GigaAM и Emo
+  ollama:   # веса LLM

@@ -1,0 +1,24 @@
+# Дополнение для сервера с видеокартой NVIDIA (нужен NVIDIA Container Toolkit):
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+# Распознавание и LLM работают на GPU — в разы быстрее, чем на процессоре.
+
+x-gpu: &gpu
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: all
+          capabilities: [gpu]
+
+services:
+  transcriber:
+    build:
+      args:
+        TORCH_INDEX: https://download.pytorch.org/whl/cu126
+    image: call-transcriber:gpu
+    environment:
+      DEVICE: cuda
+    deploy: *gpu
+
+  ollama:
+    deploy: *gpu

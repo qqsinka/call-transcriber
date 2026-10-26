@@ -79,7 +79,32 @@
 Очередь задач в SQLite переживает перезапуск, есть папка автоприёма (`INBOX_DIR`), basic-auth.
 Если LLM недоступна или ответила мусором, задача не падает — отдаётся транскрипт без саммари.
 
-## Запуск
+## Установка на сервер (Docker)
+
+Нужны Docker с Compose v2, ~15 ГБ диска, 16 ГБ RAM (LLM занимает ~7 ГБ). Два контейнера: сервис
+транскрибации и Ollama с LLM; при первом запуске модели скачиваются сами (GigaAM ~1 ГБ, GigaChat 6.5 ГБ).
+
+```bash
+git clone https://github.com/qqsinka/call-transcriber.git && cd call-transcriber
+cp .env.example .env        # обязательно сменить AUTH_PASSWORD
+make docker-up              # или: docker compose up -d --build
+make docker-logs            # дождаться загрузки моделей
+make docker-status          # /health -> "status": "ok"
+python3 transcriber/scripts/checks/smoke_api.py samples/call_mono.mp3 --password <пароль из .env>
+```
+
+- API — `http://сервер:8000`, LLM наружу не публикуется.
+- `./data` — очередь задач (`jobs.db`) и словарь автозамен `replacements.txt` (правится на лету);
+  `./inbox` — папка автоприёма: положенная туда запись обрабатывается и переезжает в `inbox/done`.
+- Перезапуск после сбоя и ротация логов настроены; обновление — `git pull && make docker-up`.
+- **GPU (NVIDIA):** `make docker-up-gpu` — распознавание и LLM на видеокарте (нужен NVIDIA Container Toolkit).
+- **Сервер без интернета:** на машине с интернетом `make docker-up` (скачает LLM), затем `make docker-export` —
+  получатся `call-transcriber-images.tar.gz` (образы, веса GigaAM внутри) и `ollama-models.tar.gz` (LLM).
+  На сервере: `docker load < call-transcriber-images.tar.gz`, распаковать LLM в том
+  `call-transcriber_ollama`, `docker compose up -d --no-build`.
+- Внешний Ollama вместо контейнера: `DOCKER_LLM_URL=http://адрес:11434` в `.env`.
+
+## Локальный запуск (без Docker)
 
 Linux / WSL2, Python 3.10+, ffmpeg, [Ollama](https://ollama.com) с моделью:
 
@@ -109,7 +134,6 @@ samples/                синтетические тестовые записи
 
 ## Дальше
 
-- установка на сервер (автозапуск, логи, мониторинг `/health`);
 - ночной режим: днём записи собираются, после рабочего дня обрабатываются;
 - привязка звонка к клиенту по номеру телефона, запись результатов в 1С;
 - утренний отчёт по критическим и важным звонкам;

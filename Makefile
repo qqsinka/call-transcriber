@@ -3,9 +3,12 @@ PY          := $(VENV)/bin/python
 TORCH_INDEX ?= https://download.pytorch.org/whl/cpu
 HOST        ?= 0.0.0.0
 PORT        ?= 8000
+COMPOSE     := docker compose
+COMPOSE_GPU := docker compose -f docker-compose.yml -f docker-compose.gpu.yml
 
-.PHONY: install run test samples
+.PHONY: install run test samples docker-up docker-up-gpu docker-logs docker-status docker-down docker-test docker-export
 
+# ---------- локальный запуск (venv) ----------
 install:
 	test -x $(PY) || python3 -m venv $(VENV)
 	$(PY) -m pip install -U pip
@@ -21,3 +24,35 @@ test:
 
 samples:
 	$(PY) transcriber/scripts/make_samples.py samples
+
+# ---------- Docker ----------
+# сборка и запуск: сервис + Ollama; при первом старте скачиваются веса (GigaAM ~1 ГБ, LLM 6.5 ГБ)
+docker-up:
+	test -f .env || cp .env.example .env
+	mkdir -p data inbox
+	$(COMPOSE) up -d --build
+
+docker-up-gpu:
+	test -f .env || cp .env.example .env
+	mkdir -p data inbox
+	$(COMPOSE_GPU) up -d --build
+
+docker-logs:
+	$(COMPOSE) logs -f --tail=100 transcriber ollama-pull
+
+docker-status:
+	$(COMPOSE) ps
+	curl -s http://localhost:$(PORT)/health; echo
+
+docker-down:
+	$(COMPOSE) down
+
+# юнит-тесты внутри собранного образа
+docker-test:
+	$(COMPOSE) run --rm --no-deps transcriber python -m pytest -q -p no:cacheprovider transcriber/tests
+
+# перенос на сервер без интернета: образы в архив (веса GigaAM — внутри образа, LLM — отдельным архивом тома)
+docker-export:
+	PRELOAD_MODELS=1 $(COMPOSE) build
+	docker save call-transcriber:latest ollama/ollama:latest | gzip > call-transcriber-images.tar.gz
+	docker run --rm -v call-transcriber_ollama:/data -v "$(CURDIR)":/backup alpine tar czf /backup/ollama-models.tar.gz -C /data .
