@@ -3,3 +3,5 @@
 *.mp3 binary
 *.m4a binary
 *.ogg binary
+# скрипты PowerShell: CRLF и UTF-8 с BOM, иначе Windows PowerShell 5.1 читает кириллицу как ANSI
+*.ps1 text eol=crlf

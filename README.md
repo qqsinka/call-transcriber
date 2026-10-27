@@ -82,7 +82,9 @@
 
 ## Установка на сервер (Docker)
 
-Пошаговая инструкция с проверкой всей цепочки — **[INSTALL.md](INSTALL.md)**. Коротко:
+Пошаговая инструкция с проверкой всей цепочки — **[INSTALL.md](INSTALL.md)**; для Windows Server без Docker —
+**[INSTALL_WINDOWS.md](INSTALL_WINDOWS.md)** (установщик `deploy\windows\install.ps1` ставит Python, модели, Ollama
+и две службы Windows; управление — `deploy\windows\ct.ps1`). Коротко про Docker:
 
 Нужны Docker с Compose v2, ~30 ГБ диска, 16 ГБ RAM (LLM занимает ~7 ГБ). Два контейнера: сервис
 транскрибации и Ollama с LLM; при первом запуске модели скачиваются сами (GigaAM ~1 ГБ, GigaChat 6.5 ГБ).
