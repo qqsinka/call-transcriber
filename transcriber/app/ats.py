@@ -6,6 +6,7 @@
 """
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -38,13 +39,15 @@ class FetchReport:
     downloaded: list[str] = field(default_factory=list)
     already: int = 0
     too_small: int = 0
+    skipped_by_limit: int = 0
     failed: list[str] = field(default_factory=list)
     folders: list[str] = field(default_factory=list)
 
     def __str__(self) -> str:
         verb = "к скачиванию" if self.dry_run else "скачано"
+        tail = f", отложено по лимиту {self.skipped_by_limit}" if self.skipped_by_limit else ""
         return (f"{self.day}: папки {', '.join(self.folders) or '—'}; {verb} {len(self.downloaded)}, "
-                f"уже было {self.already}, пустышек {self.too_small}, ошибок {len(self.failed)}")
+                f"уже было {self.already}, пустышек {self.too_small}, ошибок {len(self.failed)}{tail}")
 
 
 def parse_listing(html: str, base_url: str) -> list[Entry]:
@@ -105,24 +108,36 @@ class AtsFetcher:
             part.unlink(missing_ok=True)
             raise
 
-    def fetch_day(self, day: date, dest: Path, dry_run: bool = False) -> FetchReport:
-        """Скачать записи за день в dest. Пропускает файлы, которые уже есть в dest или dest/done."""
+    def fetch_day(self, day: date, dest: Path, dry_run: bool = False,
+                  is_known: Callable[[str], bool] | None = None, limit: int | None = None,
+                  lines: tuple[str, ...] | None = None, quiet: bool = False) -> FetchReport:
+        """Скачать записи за день в dest (не больше limit). Пропускает файлы, которые уже есть в dest или dest/done,
+        и те, что is_known(имя) отмечает как уже обработанные (их аудио к этому времени могло быть удалено).
+        lines — папки линий (по умолчанию ATS_LINES; пусто — все за день)."""
         report = FetchReport(day, dry_run)
         dest.mkdir(parents=True, exist_ok=True)
         known = {p.name for folder in (dest, dest / "done") if folder.exists() for p in folder.iterdir()}
-        wanted = set(self.settings.ats_lines)
-        for folder in self._list(self.day_url(day)):
-            if not folder.is_dir or (wanted and folder.name not in wanted):
-                continue
+        wanted = tuple(lines if lines is not None else self.settings.ats_lines)
+        if wanted:  # линии известны — сразу в их папки, без списка за день (меньше запросов к АТС)
+            folders = [Entry(name, f"{self.day_url(day)}{name}/", True) for name in wanted]
+        else:
+            folders = [f for f in self._list(self.day_url(day)) if f.is_dir]
+        for folder in folders:
+            entries = self._list(folder.url + ("" if folder.url.endswith("/") else "/"))
+            if not entries and wanted:
+                continue  # по этой линии за день звонков ещё не было (папки нет)
             report.folders.append(folder.name)
-            for entry in self._list(folder.url + ("" if folder.url.endswith("/") else "/")):
+            for entry in entries:
                 if entry.is_dir:
                     continue
-                if entry.name in known:
+                if entry.name in known or (is_known and is_known(entry.name)):
                     report.already += 1
                     continue
                 if entry.size is not None and entry.size < self.settings.ats_min_bytes:
                     report.too_small += 1
+                    continue
+                if limit is not None and len(report.downloaded) >= limit:
+                    report.skipped_by_limit += 1
                     continue
                 if dry_run:
                     report.downloaded.append(entry.name)
@@ -137,5 +152,7 @@ class AtsFetcher:
                     report.too_small += 1
                 else:
                     report.downloaded.append(entry.name)
-        log.info("Загрузка с АТС %s", report)
+        # частые проверки в реальном времени без новых записей в лог не пишем
+        if not quiet or report.downloaded or report.failed:
+            log.info("Загрузка с АТС %s", report)
         return report

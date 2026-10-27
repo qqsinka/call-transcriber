@@ -1,10 +1,11 @@
-# Транскрибация звонков: сервис + локальная LLM (Ollama).
+# Транскрибация звонков: сервис + локальная LLM (Ollama). Пошаговая установка — INSTALL.md.
 #
-#   cp .env.example .env      # логин/пароль API, модель, параметры
+#   cp .env.example .env      # логин/пароль API, доступ к АТС, расписание
 #   make docker-up            # = docker compose up -d --build
 #
 # С видеокартой NVIDIA: make docker-up-gpu (добавляет docker-compose.gpu.yml).
 # Данные на хосте: ./data (очередь jobs.db, словарь автозамен), ./inbox (папка автоприёма записей).
+# Ночной режим: в ATS_FETCH_AT сервис сам забирает записи с АТС, обрабатывает и удаляет аудио.
 
 # имя задано явно: по умолчанию compose берёт его из имени папки, а в кириллическом имени оно получается пустым
 name: call-transcriber
@@ -32,6 +33,8 @@ services:
       MODEL_DIR: /opt/models
       INBOX_DIR: /inbox
       LLM_URL: ${DOCKER_LLM_URL:-http://ollama:11434}
+      # местное время: по нему работает расписание загрузки с АТС (ATS_FETCH_AT)
+      TZ: ${TZ:-Europe/Moscow}
     ports:
       - "${PORT:-8000}:8000"
     volumes:

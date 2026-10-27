@@ -1,4 +1,5 @@
-"""In-process очередь: N потоков-воркеров берут задачи из SQLite; опциональный watcher папки INBOX_DIR."""
+"""In-process очередь: N потоков-воркеров берут задачи из SQLite; watcher папки INBOX_DIR;
+планировщик загрузки с АТС и уборки (scheduler.py)."""
 import hashlib
 import logging
 import re
@@ -12,6 +13,7 @@ from .callmeta import parse_call_name
 from .config import AUDIO_EXTENSIONS, Settings
 from .db import JobStore
 from .emotion import describe
+from .scheduler import NightScheduler
 from .summary import Summarizer
 
 log = logging.getLogger(__name__)
@@ -34,6 +36,7 @@ class Worker:
         self._threads: list[threading.Thread] = []
         self.active = 0
         self._active_lock = threading.Lock()
+        self.scheduler = NightScheduler(settings, store)
 
     # ---- жизненный цикл ----
     def start(self) -> None:
@@ -49,6 +52,10 @@ class Worker:
             t = threading.Thread(target=self._watch_inbox, name="inbox", daemon=True)
             t.start()
             self._threads.append(t)
+        # расписание загрузки с АТС и уборка старых файлов
+        t = threading.Thread(target=self.scheduler.run, args=(self._stop,), name="scheduler", daemon=True)
+        t.start()
+        self._threads.append(t)
 
     def stop(self, timeout: float = 5.0) -> None:
         self._stop.set()
@@ -108,7 +115,8 @@ class Worker:
             return
         log.info("Задача %s: готово за %.1f с (ASR %.1f с, аудио %.1f с, фраз %d, саммари %s)",
                  call_id, took, asr_s, result["duration_s"], len(result["phrases"]), "да" if summary else "нет")
-        if not self.settings.keep_audio and job["source"] == "api":
+        # запись больше не нужна: текст, эмоции и саммари уже в базе (152-ФЗ, место на диске)
+        if not self.settings.keep_audio:
             Path(path).unlink(missing_ok=True)
 
     # ---- приём файлов ----

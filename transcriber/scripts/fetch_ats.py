@@ -4,7 +4,8 @@
 Запуск:
   python transcriber/scripts/fetch_ats.py                     # вчерашний день
   python transcriber/scripts/fetch_ats.py --date 2026-10-26 --dry-run   # только показать, что скачается
-  python transcriber/scripts/fetch_ats.py --date today --dest inbox
+  python transcriber/scripts/fetch_ats.py --date today --dest inbox --limit 3
+Обычно запускать вручную не нужно: в ATS_FETCH_AT сервис забирает записи сам (ночной режим).
 """
 import argparse
 import logging
@@ -15,6 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.ats import AtsFetcher  # noqa: E402
 from app.config import Settings  # noqa: E402
+from app.db import JobStore  # noqa: E402
 
 
 def parse_day(value: str) -> date:
@@ -30,12 +32,16 @@ def main() -> None:
     p.add_argument("--date", default="yesterday", help="ГГГГ-ММ-ДД | today | yesterday (по умолчанию)")
     p.add_argument("--dest", help="куда скачивать; по умолчанию INBOX_DIR из настроек или ./inbox")
     p.add_argument("--dry-run", action="store_true", help="только показать список, ничего не скачивать")
+    p.add_argument("--limit", type=int, help="не больше стольких записей (проверка на паре звонков)")
     a = p.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     settings = Settings()
     dest = Path(a.dest or settings.inbox_dir or "inbox")
-    report = AtsFetcher(settings).fetch_day(parse_day(a.date), dest, dry_run=a.dry_run)
+    # звонки, которые сервис уже обработал (их аудио удалено), повторно не качаем
+    store = JobStore(settings.db_path) if settings.db_path.exists() else None
+    is_known = (lambda name: store.count_call(Path(name).stem) > 0) if store else None
+    report = AtsFetcher(settings).fetch_day(parse_day(a.date), dest, dry_run=a.dry_run, is_known=is_known, limit=a.limit)
     for name in report.downloaded:
         print(("будет скачано: " if a.dry_run else "скачано: ") + name)
     for name in report.failed:

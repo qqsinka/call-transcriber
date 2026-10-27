@@ -4,8 +4,10 @@ import secrets
 import shutil
 import uuid
 from contextlib import asynccontextmanager
+from datetime import date, timedelta
 from pathlib import Path
 
+import httpx
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
@@ -54,6 +56,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/health")
     def health():
         worker: Worker = app.state.worker
+        sched = worker.scheduler
         t = worker.transcriber
         asr = {"model": settings.asr_model, "device": settings.device, "ready": t.ready.is_set()}
         if t.load_error:
@@ -76,7 +79,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "queue": app.state.store.counts(),
             "active": worker.active,
             "inbox": settings.inbox_dir or None,
+            "ats": {
+                "enabled": bool(settings.ats_url),
+                "schedule": list(settings.ats_fetch_at),
+                "next_fetch": sched.next_fetch_at.isoformat(timespec="minutes") if sched.next_fetch_at else None,
+                "last_fetch_at": sched.last_fetch_at,
+                "last_fetch": sched.last_fetch,
+                "live": {
+                    "lines": list(settings.ats_live_lines),
+                    "every_min": settings.ats_live_every_min,
+                    "hours": settings.ats_live_hours,
+                    **sched.live,
+                } if settings.ats_live_lines else None,
+            },
+            "storage": {
+                "keep_audio": settings.keep_audio,
+                "audio_retention_days": settings.audio_retention_days,
+                "results_retention_days": settings.results_retention_days,
+                "last_cleanup": sched.last_cleanup,
+            },
         }
+
+    @app.post("/ats/fetch", dependencies=[Depends(check_auth)])
+    def ats_fetch(day: date | None = None, days: int = 1, limit: int | None = None, dry_run: bool = False):
+        """Скачать записи с АТС сейчас (не дожидаясь расписания): за day (по умолчанию сегодня) и days-1 дней до него.
+        limit — не больше стольких записей (для проверки на паре звонков), dry_run — только показать."""
+        start = day or date.today()
+        try:
+            reports = app.state.worker.scheduler.fetch(
+                [start - timedelta(days=i) for i in range(max(1, days))], limit=limit, dry_run=dry_run)
+        except PermissionError as exc:
+            raise HTTPException(502, str(exc))
+        except ValueError as exc:
+            raise HTTPException(409, str(exc))
+        except httpx.HTTPError as exc:
+            raise HTTPException(502, f"АТС недоступна: {type(exc).__name__}: {exc}")
+        return {"reports": [str(r) for r in reports], "files": [n for r in reports for n in r.downloaded]}
 
     @app.post("/jobs", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(check_auth)])
     def create_job(

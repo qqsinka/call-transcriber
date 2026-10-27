@@ -29,7 +29,7 @@ samples:
 
 # записи за день с АТС в папку автоприёма: make fetch-ats DATE=2026-10-26 (по умолчанию вчера)
 fetch-ats:
-	$(PY) transcriber/scripts/fetch_ats.py --date $(DATE)
+	$(PY) transcriber/scripts/fetch_ats.py --date $(DATE) $(if $(LIMIT),--limit $(LIMIT)) $(if $(DRY),--dry-run)
 
 # ---------- Docker ----------
 # сборка и запуск: сервис + Ollama; при первом старте скачиваются веса (GigaAM ~1 ГБ, LLM 6.5 ГБ)
@@ -53,9 +53,11 @@ docker-status:
 docker-down:
 	$(COMPOSE) down
 
-# записи за день с АТС в ./inbox работающего сервиса: make docker-fetch-ats DATE=2026-10-26
+# записи за день с АТС в ./inbox работающего сервиса: make docker-fetch-ats DATE=2026-10-26 LIMIT=3
+# (без ожидания расписания; LIMIT — для проверки на паре звонков, DRY=1 — только показать список)
 docker-fetch-ats:
-	$(COMPOSE) run --rm --no-deps transcriber python transcriber/scripts/fetch_ats.py --date $(DATE) --dest /inbox
+	$(COMPOSE) exec transcriber python transcriber/scripts/fetch_ats.py --date $(DATE) --dest /inbox \
+		$(if $(LIMIT),--limit $(LIMIT)) $(if $(DRY),--dry-run)
 
 # юнит-тесты внутри собранного образа
 docker-test:

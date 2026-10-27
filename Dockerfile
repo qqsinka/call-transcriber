@@ -17,9 +17,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MODEL_DIR=/opt/models \
     DATA_DIR=/app/data
 
-# ffmpeg — декодирование любых аудиоформатов; git — установка GigaAM из репозитория
+# ffmpeg — декодирование любых аудиоформатов; git — установка GigaAM из репозитория;
+# tzdata — местное время для расписания (TZ задаётся в docker-compose)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg git \
+    && apt-get install -y --no-install-recommends ffmpeg git tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

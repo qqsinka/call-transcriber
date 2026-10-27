@@ -81,6 +81,25 @@ class Settings:
     # записи меньше — несостоявшиеся звонки (на АТС встречаются файлы по 288 байт)
     ats_min_bytes: int = field(default_factory=lambda: _env_int("ATS_MIN_BYTES", 4096))
     ats_timeout_s: float = field(default_factory=lambda: _env_float("ATS_TIMEOUT_S", 60.0))
+    # ночной режим: когда забирать записи с АТС («20:30» или «13:00,20:30»); пусто -> только вручную
+    ats_fetch_at: tuple[str, ...] = field(
+        default_factory=lambda: tuple(x.strip() for x in _env("ATS_FETCH_AT").split(",") if x.strip())
+    )
+    # за сколько дней забирать: 1 — только сегодня, 2 — сегодня и вчера (добрать поздние звонки)
+    ats_fetch_days: int = field(default_factory=lambda: _env_int("ATS_FETCH_DAYS", 2))
+    # реальное время: эти линии проверяются каждые ATS_LIVE_EVERY_MIN минут в часы ATS_LIVE_HOURS,
+    # новая запись сразу скачивается и обрабатывается; пусто -> выключено (работает только ночной режим)
+    ats_live_lines: tuple[str, ...] = field(
+        default_factory=lambda: tuple(x.strip() for x in _env("ATS_LIVE_LINES").split(",") if x.strip())
+    )
+    ats_live_every_min: float = field(default_factory=lambda: _env_float("ATS_LIVE_EVERY_MIN", 2.0))
+    ats_live_hours: str = field(default_factory=lambda: _env("ATS_LIVE_HOURS", "08:00-20:00"))
+
+    # Хранение. Аудио удачно обработанных звонков удаляется сразу (KEEP_AUDIO=false);
+    # оставшееся (ошибки, KEEP_AUDIO=true) — через AUDIO_RETENTION_DAYS дней (0 — не удалять).
+    audio_retention_days: int = field(default_factory=lambda: _env_int("AUDIO_RETENTION_DAYS", 7))
+    # результаты (текст, саммари) в базе; 0 — хранить всегда
+    results_retention_days: int = field(default_factory=lambda: _env_int("RESULTS_RETENTION_DAYS", 0))
 
     # Basic-auth (пусто -> выключена)
     auth_user: str = field(default_factory=lambda: _env("AUTH_USER"))

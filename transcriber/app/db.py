@@ -2,7 +2,7 @@
 import json
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 SCHEMA = """
@@ -123,6 +123,11 @@ class JobStore:
     def counts(self) -> dict:
         rows = self._exec("SELECT status, COUNT(*) AS n FROM jobs GROUP BY status").fetchall()
         return {r["status"]: r["n"] for r in rows}
+
+    def delete_finished_before(self, days: int) -> int:
+        """Удалить завершённые задачи (done/error), закончившиеся больше days дней назад."""
+        border = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+        return self._exec("DELETE FROM jobs WHERE status IN ('done', 'error') AND finished_at < ?", (border,)).rowcount
 
     def count_call(self, call_id: str) -> int:
         return self._exec("SELECT COUNT(*) FROM jobs WHERE call_id=?", (call_id,)).fetchone()[0]

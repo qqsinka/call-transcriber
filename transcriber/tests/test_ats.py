@@ -1,16 +1,13 @@
-import base64
-import threading
 from dataclasses import replace
 from datetime import date
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
 from app.ats import AtsFetcher, parse_listing
 from app.callmeta import parse_call_name
 from app.config import Settings
+from scripts.checks.fake_ats import KB, human, listing, serve
 
-KB = 1024
 # поддельная АТС: тот же формат, что у Apache на настоящей, номера вымышленные
 FILES = {
     "306090": {
@@ -22,58 +19,16 @@ FILES = {
 }
 
 
-def human(size: int) -> str:
-    if size >= KB * KB:
-        return f"{size / KB / KB:.1f}M"
-    return f"{size // KB}K" if size >= KB else str(size)
-
-
-def listing(path: str, rows: list[tuple[str, str, str]]) -> str:
-    head = ('<html><head><title>Index of {p}</title></head><body><h1>Index of {p}</h1><table>'
-            '<tr><th><img src="/icons/blank.gif" alt="[ICO]"></th><th><a href="?C=N;O=D">Name</a></th>'
-            '<th><a href="?C=M;O=A">Last modified</a></th><th><a href="?C=S;O=A">Size</a></th></tr>'
-            '<tr><td><img src="/icons/back.gif" alt="[PARENTDIR]"></td><td><a href="/record/26/10/">'
-            'Parent Directory</a></td><td>&nbsp;</td><td align="right">  - </td><td>&nbsp;</td></tr>').format(p=path)
-    body = "".join(f'<tr><td><img src="/icons/{icon}.gif" alt="[X]"></td><td><a href="{href}">{href}</a></td>'
-                   f'<td align="right">2026-10-26 09:00  </td><td align="right">{size} </td><td>&nbsp;</td></tr>'
-                   for href, size, icon in rows)
-    return head + body + "</table></body></html>"
-
-
-class FakeAts(BaseHTTPRequestHandler):
-    def log_message(self, *args):
-        pass
-
-    def do_GET(self):
-        if self.headers.get("Authorization") != "Basic " + base64.b64encode(b"user:secret").decode():
-            self.send_response(401)
-            self.send_header("WWW-Authenticate", 'Basic realm="Enter your name and password"')
-            self.end_headers()
-            return
-        parts = [p for p in self.path.split("/") if p]
-        if parts == ["record", "26", "10", "26"]:
-            return self.reply(listing(self.path, [(f"{d}/", "-", "folder") for d in FILES]).encode())
-        if len(parts) == 5 and parts[4] in FILES:
-            rows = [(name, human(size), "sound2") for name, size in FILES[parts[4]].items()]
-            return self.reply(listing(self.path, rows).encode())
-        if len(parts) == 6 and parts[5] in FILES.get(parts[4], {}):
-            return self.reply(b"\0" * FILES[parts[4]][parts[5]], "audio/mpeg")
-        self.send_response(404)
-        self.end_headers()
-
-    def reply(self, data: bytes, ctype: str = "text/html") -> None:
-        self.send_response(200)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
-
-
 @pytest.fixture(scope="module")
-def ats_url():
-    server = ThreadingHTTPServer(("127.0.0.1", 0), FakeAts)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{server.server_port}/record"
+def ats_url(tmp_path_factory):
+    root = tmp_path_factory.mktemp("ats")
+    for line, files in FILES.items():
+        folder = root / "26" / "10" / "26" / line
+        folder.mkdir(parents=True)
+        for name, size in files.items():
+            (folder / name).write_bytes(b"\0" * size)
+    server, url = serve(root)
+    yield url
     server.shutdown()
 
 
@@ -85,7 +40,7 @@ def fetcher(url, **kw):
 # ---- разбор страницы и имени файла
 
 def test_parse_listing_sizes_and_skips_service_links():
-    html = listing("/record/26/10/26/306090", [(n, human(s), "sound2") for n, s in FILES["306090"].items()])
+    html = listing("/record/26/10/26/306090", [(n, human(s)) for n, s in FILES["306090"].items()])
     entries = parse_listing(html, "http://ats/record/26/10/26/306090/")
     assert [(e.name, e.size) for e in entries] == [
         ("26-10-26_08-56-56_70000000001_306090_1.1.mp3", 288),
@@ -119,6 +74,14 @@ def test_fetch_day_downloads_skips_empty_and_known(ats_url, tmp_path):
 
     again = fetcher(ats_url).fetch_day(date(2026, 10, 26), tmp_path)  # повторный запуск ничего не качает
     assert again.downloaded == [] and again.already == 3
+
+
+def test_fetch_skips_processed_calls_and_respects_limit(ats_url, tmp_path):
+    # аудио обработанного звонка уже удалено, но в базе он есть -> не качаем снова
+    processed = {"26-10-26_09-02-47_70000000002_306090_2.2"}
+    report = fetcher(ats_url).fetch_day(date(2026, 10, 26), tmp_path, limit=1,
+                                        is_known=lambda name: name.rsplit(".", 1)[0] in processed)
+    assert (report.already, len(report.downloaded), report.too_small, report.skipped_by_limit) == (1, 1, 1, 1)
 
 
 def test_fetch_only_selected_lines_and_dry_run(ats_url, tmp_path):
