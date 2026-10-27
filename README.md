@@ -103,6 +103,10 @@ python3 transcriber/scripts/checks/smoke_api.py samples/call_mono.mp3 --password
   На сервере: `docker load < call-transcriber-images.tar.gz`, распаковать LLM в том
   `call-transcriber_ollama`, `docker compose up -d --no-build`.
 - Внешний Ollama вместо контейнера: `DOCKER_LLM_URL=http://адрес:11434` в `.env`.
+- **Записи с АТС:** если АТС отдаёт записи веб-списком (`<адрес>/ГГ/ММ/ДД/<линия>/*.mp3`, basic-auth),
+  `make docker-fetch-ats DATE=2026-10-26` скачает записи за день в `./inbox` (по умолчанию — за вчера).
+  Настройки `ATS_*` в `.env`; пустышки и уже скачанные пропускаются. Дата, номер абонента и линия
+  берутся из имени файла и сохраняются в задаче.
 
 ## Локальный запуск (без Docker)
 

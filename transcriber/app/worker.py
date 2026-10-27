@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 from .asr import Transcriber
+from .callmeta import parse_call_name
 from .config import AUDIO_EXTENSIONS, Settings
 from .db import JobStore
 from .emotion import describe
@@ -138,7 +139,10 @@ class Worker:
                     if target.exists():
                         target = done / f"{f.stem}-{int(time.time())}{f.suffix}"
                     shutil.move(str(f), target)
-                    self.submit_file(f.stem, target, f.name, source="inbox")
+                    # дата, номер абонента и линия/внутренний номер — из имени файла АТС, если оно в её формате
+                    meta = parse_call_name(f.stem)
+                    self.submit_file(f.stem, target, f.name, source="inbox", phone=meta.get("phone"),
+                                     ext=meta.get("ext"), call_date=meta.get("call_date"))
                     log.info("Из папки: %s -> задача %s", f.name, f.stem)
             except Exception:
                 log.exception("Ошибка обхода INBOX_DIR")

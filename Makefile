@@ -6,7 +6,9 @@ PORT        ?= 8000
 COMPOSE     := docker compose
 COMPOSE_GPU := docker compose -f docker-compose.yml -f docker-compose.gpu.yml
 
-.PHONY: install run test samples docker-up docker-up-gpu docker-logs docker-status docker-down docker-test docker-export
+DATE        ?= yesterday
+
+.PHONY: install run test samples fetch-ats docker-up docker-up-gpu docker-logs docker-status docker-down docker-test docker-export docker-fetch-ats
 
 # ---------- локальный запуск (venv) ----------
 install:
@@ -24,6 +26,10 @@ test:
 
 samples:
 	$(PY) transcriber/scripts/make_samples.py samples
+
+# записи за день с АТС в папку автоприёма: make fetch-ats DATE=2026-10-26 (по умолчанию вчера)
+fetch-ats:
+	$(PY) transcriber/scripts/fetch_ats.py --date $(DATE)
 
 # ---------- Docker ----------
 # сборка и запуск: сервис + Ollama; при первом старте скачиваются веса (GigaAM ~1 ГБ, LLM 6.5 ГБ)
@@ -46,6 +52,10 @@ docker-status:
 
 docker-down:
 	$(COMPOSE) down
+
+# записи за день с АТС в ./inbox работающего сервиса: make docker-fetch-ats DATE=2026-10-26
+docker-fetch-ats:
+	$(COMPOSE) run --rm --no-deps transcriber python transcriber/scripts/fetch_ats.py --date $(DATE) --dest /inbox
 
 # юнит-тесты внутри собранного образа
 docker-test:

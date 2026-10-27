@@ -70,6 +70,18 @@ class Settings:
     inbox_dir: str = field(default_factory=lambda: _env("INBOX_DIR"))
     inbox_poll_s: float = field(default_factory=lambda: _env_float("INBOX_POLL_S", 3.0))
 
+    # Записи с АТС (веб-список файлов Apache): <ATS_URL>/ГГ/ММ/ДД/<линия>/<запись>.mp3
+    ats_url: str = field(default_factory=lambda: _env("ATS_URL"))
+    ats_user: str = field(default_factory=lambda: _env("ATS_USER"))
+    ats_password: str = field(default_factory=lambda: _env("ATS_PASSWORD"))
+    # папки линий/внутренних номеров через запятую; пусто -> все папки за день
+    ats_lines: tuple[str, ...] = field(
+        default_factory=lambda: tuple(x.strip() for x in _env("ATS_LINES").split(",") if x.strip())
+    )
+    # записи меньше — несостоявшиеся звонки (на АТС встречаются файлы по 288 байт)
+    ats_min_bytes: int = field(default_factory=lambda: _env_int("ATS_MIN_BYTES", 4096))
+    ats_timeout_s: float = field(default_factory=lambda: _env_float("ATS_TIMEOUT_S", 60.0))
+
     # Basic-auth (пусто -> выключена)
     auth_user: str = field(default_factory=lambda: _env("AUTH_USER"))
     auth_password: str = field(default_factory=lambda: _env("AUTH_PASSWORD"))
