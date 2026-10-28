@@ -17,16 +17,26 @@ FILES = {
     },
     "103": {"26-10-26_10-00-00_103_80000000004_4.4.mp3": 50 * KB},
 }
+# как на настоящей АТС: папка — номер, на который звонили. Исходящие лежат в папках номеров клиентов
+# (мобильный 8… или городской 6-значный), в папках внутренних номеров — разговоры внутри офиса
+FILES_28 = {
+    "306090": {"26-10-28_09-10-04_70000000005_306090_5.5.mp3": 60 * KB},
+    "80000000006": {"26-10-28_09-15-44_208_80000000006_6.6.mp3": 40 * KB},
+    "675804": {"26-10-28_12-35-00_227_675804_7.7.mp3": 30 * KB,
+               "26-10-28_12-40-00_227_675804_8.8.mp3": 288},  # пустышка
+    "103": {"26-10-28_10-39-06_100_103_9.9.mp3": 50 * KB},
+}
 
 
 @pytest.fixture(scope="module")
 def ats_url(tmp_path_factory):
     root = tmp_path_factory.mktemp("ats")
-    for line, files in FILES.items():
-        folder = root / "26" / "10" / "26" / line
-        folder.mkdir(parents=True)
-        for name, size in files.items():
-            (folder / name).write_bytes(b"\0" * size)
+    for day, lines in (("26", FILES), ("28", FILES_28)):
+        for line, files in lines.items():
+            folder = root / "26" / "10" / day / line
+            folder.mkdir(parents=True)
+            for name, size in files.items():
+                (folder / name).write_bytes(b"\0" * size)
     server, url = serve(root)
     yield url
     server.shutdown()
@@ -89,6 +99,31 @@ def test_fetch_only_selected_lines_and_dry_run(ats_url, tmp_path):
     assert report.folders == ["306090"] and len(report.downloaded) == 2
     assert not any(tmp_path.iterdir())  # dry-run ничего не пишет
     assert "к скачиванию 2" in str(report)
+
+
+def test_outgoing_adds_client_folders_but_not_internal(ats_url, tmp_path):
+    f = fetcher(ats_url, ats_lines=("306090", "687755"), ats_outgoing=True)
+    report = f.fetch_day(date(2026, 10, 28), tmp_path, dry_run=True)
+    assert sorted(report.folders) == ["306090", "675804", "80000000006"]  # 687755 за день нет, 103 — внутренний
+    assert sorted(report.downloaded) == ["26-10-28_09-10-04_70000000005_306090_5.5.mp3",
+                                         "26-10-28_09-15-44_208_80000000006_6.6.mp3",
+                                         "26-10-28_12-35-00_227_675804_7.7.mp3"]
+    assert report.too_small == 1
+    # реальное время берёт только свои линии, даже если исходящие включены
+    live = f.fetch_day(date(2026, 10, 28), tmp_path, dry_run=True, lines=("306090",), outgoing=False)
+    assert live.folders == ["306090"]
+
+
+def test_outgoing_off_by_default(ats_url, tmp_path):
+    report = fetcher(ats_url, ats_lines=("306090",)).fetch_day(date(2026, 10, 28), tmp_path, dry_run=True)
+    assert report.folders == ["306090"]
+
+
+def test_report_shortens_long_folder_list():
+    from app.ats import FetchReport
+    report = FetchReport(date(2026, 10, 28), folders=["306090", "80000000001", "80000000002", "80000000003",
+                                                      "80000000004", "675804"])
+    assert "папки 306090, 80000000001, 80000000002, 80000000003 и ещё 2;" in str(report)
 
 
 def test_wrong_password_and_missing_day(ats_url, tmp_path):

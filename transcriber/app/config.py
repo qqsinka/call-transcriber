@@ -82,6 +82,9 @@ class Settings:
     ats_lines: tuple[str, ...] = field(
         default_factory=lambda: tuple(x.strip() for x in _env("ATS_LINES").split(",") if x.strip())
     )
+    # исходящие: кроме ATS_LINES забирать папки внешних номеров (5+ цифр — клиенты, на которые звонили сотрудники);
+    # только при загрузке по расписанию и вручную, реальное время берёт лишь ATS_LIVE_LINES
+    ats_outgoing: bool = field(default_factory=lambda: _env_bool("ATS_OUTGOING", False))
     # записи меньше — несостоявшиеся звонки (на АТС встречаются файлы по 288 байт)
     ats_min_bytes: int = field(default_factory=lambda: _env_int("ATS_MIN_BYTES", 4096))
     ats_timeout_s: float = field(default_factory=lambda: _env_float("ATS_TIMEOUT_S", 60.0))
@@ -102,6 +105,8 @@ class Settings:
     # Хранение. Аудио удачно обработанных звонков удаляется сразу (KEEP_AUDIO=false);
     # оставшееся (ошибки, KEEP_AUDIO=true) — через AUDIO_RETENTION_DAYS дней (0 — не удалять).
     audio_retention_days: int = field(default_factory=lambda: _env_int("AUDIO_RETENTION_DAYS", 7))
+    # копия отчёта по каждому готовому звонку в txt: <SUMMARY_DIR>/вход|исход/<запись>.txt; пусто -> выключено
+    summary_dir: str = field(default_factory=lambda: _env("SUMMARY_DIR"))
     # результаты (текст, саммари) в базе; 0 — хранить всегда
     results_retention_days: int = field(default_factory=lambda: _env_int("RESULTS_RETENTION_DAYS", 0))
 

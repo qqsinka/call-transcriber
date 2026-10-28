@@ -2,6 +2,12 @@
 
 Без torch и моделей — используется и сервисом, и командами просмотра (scripts/report.py).
 """
+import re
+from pathlib import Path
+
+from .callmeta import parse_call_name
+
+DIRECTION_DIRS = {"incoming": "вход", "outgoing": "исход", "internal": "внутренние"}
 ROLE_LABELS = {"client": "Клиент", "operator": "Оператор"}
 LABELS_RU = {"angry": "злость", "sad": "грусть", "neutral": "нейтрально", "positive": "позитив"}
 
@@ -64,9 +70,12 @@ def job_report(job: dict) -> str:
     """Отчёт по звонку из записи базы (JobStore.get): шапка, карточка, эмоции, расшифровка."""
     when = (job.get("call_date") or "").replace("T", " ")
     duration = int(job.get("duration_s") or 0)
+    # у исходящего ext — внутренний номер сотрудника, у входящего — наша линия
+    outgoing = parse_call_name(job["call_id"]).get("direction") == "outgoing"
+    who = (f"исходящий, номер клиента {job.get('phone') or '—'}, сотрудник (внутр.) {job.get('ext') or '—'}" if outgoing
+           else f"номер {job.get('phone') or '—'}, линия {job.get('ext') or '—'}")
     head = [
-        f"Звонок: {when or '—'}, номер {job.get('phone') or '—'}, линия {job.get('ext') or '—'}, "
-        f"длительность {duration // 60}:{duration % 60:02d}",
+        f"Звонок: {when or '—'}, {who}, длительность {duration // 60}:{duration % 60:02d}",
         f"Файл: {job['call_id']}; обработка {round(job.get('processing_s') or 0)} с",
         "",
     ]
@@ -77,3 +86,14 @@ def job_report(job: dict) -> str:
         body += ["", *describe(job["emotion"])]
     body += ["", "Расшифровка:", *phrase_lines(job.get("phrases") or [])]
     return "\n".join(head + body) + "\n"
+
+
+def save_report(job: dict, root: str | Path) -> Path:
+    """Отчёт по звонку в <root>/вход|исход/<запись>.txt: направление — по имени файла АТС,
+    звонки не в её формате (загружены через API) — в «другие»."""
+    folder = DIRECTION_DIRS.get(parse_call_name(job["call_id"]).get("direction"), "другие")
+    path = Path(root) / folder / f"{re.sub(r'[^\w.-]+', '_', job['call_id'])}.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # utf-8 с BOM — чтобы старый Блокнот Windows не показал кракозябры
+    path.write_text(job_report(job), encoding="utf-8-sig")
+    return path

@@ -14,6 +14,7 @@ from urllib.parse import unquote, urljoin
 
 import httpx
 
+from .callmeta import is_internal
 from .config import AUDIO_EXTENSIONS, Settings
 
 log = logging.getLogger(__name__)
@@ -46,7 +47,9 @@ class FetchReport:
     def __str__(self) -> str:
         verb = "к скачиванию" if self.dry_run else "скачано"
         tail = f", отложено по лимиту {self.skipped_by_limit}" if self.skipped_by_limit else ""
-        return (f"{self.day}: папки {', '.join(self.folders) or '—'}; {verb} {len(self.downloaded)}, "
+        # с исходящими папок десятки (по папке на номер клиента) — в лог только первые
+        shown = ", ".join(self.folders[:4]) + (f" и ещё {len(self.folders) - 4}" if len(self.folders) > 4 else "")
+        return (f"{self.day}: папки {shown or '—'}; {verb} {len(self.downloaded)}, "
                 f"уже было {self.already}, пустышек {self.too_small}, ошибок {len(self.failed)}{tail}")
 
 
@@ -110,16 +113,24 @@ class AtsFetcher:
 
     def fetch_day(self, day: date, dest: Path, dry_run: bool = False,
                   is_known: Callable[[str], bool] | None = None, limit: int | None = None,
-                  lines: tuple[str, ...] | None = None, quiet: bool = False) -> FetchReport:
+                  lines: tuple[str, ...] | None = None, quiet: bool = False,
+                  outgoing: bool | None = None) -> FetchReport:
         """Скачать записи за день в dest (не больше limit). Пропускает файлы, которые уже есть в dest или dest/done,
         и те, что is_known(имя) отмечает как уже обработанные (их аудио к этому времени могло быть удалено).
-        lines — папки линий (по умолчанию ATS_LINES; пусто — все за день)."""
+        lines — папки линий (по умолчанию ATS_LINES; пусто — все за день).
+        outgoing — добавить папки внешних номеров (исходящие; по умолчанию ATS_OUTGOING)."""
         report = FetchReport(day, dry_run)
         dest.mkdir(parents=True, exist_ok=True)
         known = {p.name for folder in (dest, dest / "done") if folder.exists() for p in folder.iterdir()}
         wanted = tuple(lines if lines is not None else self.settings.ats_lines)
+        outgoing = self.settings.ats_outgoing if outgoing is None else outgoing
         if wanted:  # линии известны — сразу в их папки, без списка за день (меньше запросов к АТС)
             folders = [Entry(name, f"{self.day_url(day)}{name}/", True) for name in wanted]
+            if outgoing:
+                # папка на АТС — номер, на который звонили: внешний номер (5+ цифр) не из наших линий — это
+                # исходящий звонок сотрудника; папки внутренних номеров (100, 208) — разговоры внутри офиса, мимо
+                folders += [f for f in self._list(self.day_url(day))
+                            if f.is_dir and f.name.isdigit() and not is_internal(f.name) and f.name not in wanted]
         else:
             folders = [f for f in self._list(self.day_url(day)) if f.is_dir]
         for folder in folders:

@@ -4,8 +4,10 @@
 
     python transcriber/scripts/report.py list   [--date 2026-10-28 | today | yesterday]
     python transcriber/scripts/report.py export [--date …] [--out <папка>]
+    python transcriber/scripts/report.py save   [--date …] [--out <папка>]
 
 export: по файлу на звонок (карточка, эмоции, расшифровка) и _список.txt; по умолчанию в <DATA_DIR>/../export/<дата>.
+save: готовые звонки за день в SUMMARY_DIR/вход|исход — так же, как их сохраняет сервис (дозапись уже обработанных).
 В файлах персональные данные клиентов — после просмотра удалить.
 """
 import argparse
@@ -19,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.config import Settings  # noqa: E402
 from app.db import JSON_FIELDS  # noqa: E402
-from app.render import job_report  # noqa: E402
+from app.render import job_report, save_report  # noqa: E402
 
 
 def parse_day(value: str) -> str:
@@ -68,7 +70,7 @@ def table(jobs: list[dict]) -> list[str]:
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Список звонков за день и выгрузка в txt")
-    p.add_argument("command", choices=["list", "export"])
+    p.add_argument("command", choices=["list", "export", "save"])
     p.add_argument("--date", default="today", help="ГГГГ-ММ-ДД, today или yesterday")
     p.add_argument("--out", type=Path, help="папка выгрузки (по умолчанию <DATA_DIR>/../export/<дата>)")
     args = p.parse_args()
@@ -80,6 +82,14 @@ def main() -> None:
     if args.command == "list":
         print(f"Звонки за {day}\n")
         print("\n".join(lines))
+        return
+    if args.command == "save":
+        root = args.out or settings.summary_dir
+        if not root:
+            raise SystemExit("Не задан SUMMARY_DIR в .env (или --out)")
+        saved = Counter(save_report(job, root).parent.name for job in jobs if job["status"] == "done")
+        print(f"Сохранено за {day}: " + (", ".join(f"{k} {v}" for k, v in sorted(saved.items())) or "нет готовых звонков")
+              + f" -> {root}")
         return
 
     out = args.out or settings.data_dir.resolve().parent / "export" / day

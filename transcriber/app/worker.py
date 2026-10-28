@@ -13,6 +13,7 @@ from .callmeta import parse_call_name
 from .config import AUDIO_EXTENSIONS, Settings
 from .db import JobStore
 from .emotion import describe
+from .render import save_report
 from .scheduler import NightScheduler
 from .summary import Summarizer
 
@@ -115,6 +116,11 @@ class Worker:
             return
         log.info("Задача %s: готово за %.1f с (ASR %.1f с, аудио %.1f с, фраз %d, саммари %s)",
                  call_id, took, asr_s, result["duration_s"], len(result["phrases"]), "да" if summary else "нет")
+        if self.settings.summary_dir:
+            try:
+                save_report(self.store.get(call_id), self.settings.summary_dir)
+            except Exception:
+                log.exception("Задача %s: не удалось сохранить отчёт в SUMMARY_DIR", call_id)
         # запись больше не нужна: текст, эмоции и саммари уже в базе (152-ФЗ, место на диске)
         if not self.settings.keep_audio:
             Path(path).unlink(missing_ok=True)

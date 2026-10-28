@@ -99,7 +99,8 @@ class NightScheduler:
         now = now or datetime.now()
         try:
             report = AtsFetcher(self.settings).fetch_day(now.date(), self.inbox, is_known=self.is_known,
-                                                         lines=self.settings.ats_live_lines, quiet=True)
+                                                         lines=self.settings.ats_live_lines, quiet=True,
+                                                         outgoing=False)
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
             if error != self.live["error"]:  # одну и ту же ошибку каждые 2 минуты в лог не пишем

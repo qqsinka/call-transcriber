@@ -1,5 +1,5 @@
 from app.db import JobStore
-from app.render import job_report, phrase_lines
+from app.render import job_report, phrase_lines, save_report
 from scripts.report import load_jobs, table
 
 SUMMARY = {
@@ -57,6 +57,20 @@ def test_job_report(tmp_path):
     assert "Злость (p>=0.5): [00:05] 0.80" in text
     assert "[00:05] Сколько можно ждать!  ⟨злость 0.80⟩" in text
     assert "Статус: error — AudioError: битый файл" in job_report(failed)
+
+
+def test_save_report_sorts_by_direction(tmp_path):
+    done, _ = load_jobs(make_store(tmp_path), "2026-10-28")
+    outgoing = dict(done, call_id="26-10-28_09-15-44_208_80000000006_6.6", phone="80000000006", ext="208")
+    uploaded = dict(done, call_id="заявка 15/2")
+    root = tmp_path / "summary"
+    assert save_report(done, root) == root / "вход" / f"{done['call_id']}.txt"
+    assert save_report(outgoing, root) == root / "исход" / "26-10-28_09-15-44_208_80000000006_6.6.txt"
+    assert save_report(uploaded, root) == root / "другие" / "заявка_15_2.txt"
+    text = (root / "вход" / f"{done['call_id']}.txt").read_text(encoding="utf-8-sig")
+    assert text.startswith("Звонок: 2026-10-28 09:10:04") and "Тема: Не печатает чек" in text
+    assert job_report(outgoing).startswith(
+        "Звонок: 2026-10-28 09:10:04, исходящий, номер клиента 80000000006, сотрудник (внутр.) 208,")
 
 
 def test_phrase_lines_hide_neutral_and_unscored():

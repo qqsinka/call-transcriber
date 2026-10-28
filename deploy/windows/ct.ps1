@@ -8,10 +8,11 @@
   deploy\windows\ct.ps1 job <call_id>                         результат звонка (call_id — имя файла без .mp3)
   deploy\windows\ct.ps1 list [-Date 2026-10-28]               звонки за день: время, номер, приоритет, тон, тема
   deploy\windows\ct.ps1 export [-Date 2026-10-28]             выгрузить звонки за день в txt (папка export\<дата>)
+  deploy\windows\ct.ps1 save [-Date 2026-10-28]               дописать готовые звонки за день в SUMMARY_DIR\вход|исход
 #>
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("status", "logs", "restart", "stop", "start", "fetch", "job", "list", "export")]
+    [ValidateSet("status", "logs", "restart", "stop", "start", "fetch", "job", "list", "export", "save")]
     [string]$Command = "status",
     [Parameter(Position = 1)][string]$Id,
     [string]$Date,
@@ -84,7 +85,7 @@ switch ($Command) {
         $r.reports
         if ($r.files) { $(if ($Dry) { "К скачиванию:" } else { "Скачано:" }); $r.files | ForEach-Object { "  $_" } }
     }
-    { $_ -in "list", "export" } {
+    { $_ -in "list", "export", "save" } {
         # читает базу напрямую, без сервиса; вывод Python — в UTF-8, иначе кириллица ломается в конвейере
         $env:PYTHONIOENCODING = "utf-8"
         [Console]::OutputEncoding = [Text.Encoding]::UTF8
