@@ -102,9 +102,13 @@ switch ($Command) {
         if ($j.summary) {
             "Тема:       $($j.summary.topic)"
             "Приоритет:  $($j.summary.priority)   Тон: $($j.summary.tone)   Негатив: $($j.summary.negative_score)/10"
+            # почему так: сигналы с дословными цитатами клиента
+            if ($j.summary.priority_reason) { "Почему:     $($j.summary.priority_reason)" }
+            if ($j.summary.tone_reason -and $j.summary.tone_reason -ne $j.summary.priority_reason) { "Тон:        $($j.summary.tone_reason)" }
             if ($j.summary.risks) { "Риски:      $($j.summary.risks -join '; ')" }
             ""
             $j.summary.summary
+            if ($j.warning) { ""; "Внимание: $($j.warning)" }
         } elseif ($j.warning) { "Саммари нет: $($j.warning)" }
     }
 }

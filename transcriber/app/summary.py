@@ -123,8 +123,11 @@ def validate(value, schema: dict, path: str = "ответ"):
         raise InvalidAnswer(f"{path}: ожидалась строка")
     if _CJK.search(value):
         raise InvalidAnswer(f"{path}: текст не на русском")
-    if _GARBAGE.search(value):
-        raise InvalidAnswer(f"{path}: в тексте обрывки JSON или посторонние символы")
+    garbage = _GARBAGE.search(value)
+    if garbage:
+        # сработавший кусок с соседними символами — по логу видно, мусор это или слишком строгая проверка
+        near = value[max(0, garbage.start() - 15):garbage.end() + 15].replace("\n", " ")
+        raise InvalidAnswer(f"{path}: в тексте обрывки JSON или посторонние символы: «{near}»")
     value = value.strip()
     if "enum" in schema:
         value = value.lower()
@@ -184,6 +187,21 @@ def tidy_sentences(items: list[str], limit: int = 5) -> list[str]:
             sentence = sentence[0].upper() + sentence[1:]
             sentences.append(sentence if sentence[-1] in ".!?…" else sentence + ".")
     return sentences[:limit]
+
+
+def card_from_facts(facts: dict) -> dict:
+    """Запасная карточка, если LLM дважды не смогла написать свою: собираем из фактов первого шага.
+    Пересказ суше, но звонок не остаётся без карточки, а приоритет, тон и риски (считаются по фактам) не теряются."""
+    request = facts["request"].strip().rstrip(".") or "Обращение клиента"
+    first = re.split(r"[.,:;!?—]", request, maxsplit=1)[0].split()
+    return {
+        "topic": " ".join(first[:7])[:60],
+        "problem": request[:400],
+        "result": "; ".join(facts["agreements"] or facts["actions"])[:300] or f"Статус: {facts['status']}",
+        "next_step": "; ".join(facts["agreements"])[:300],
+        # tidy_sentences в summarize() доведёт до предложений с заглавной буквы и точкой
+        "summary": [request, *facts["actions"][:2], *facts["agreements"][:2]],
+    }
 
 
 def check_signals(signals: dict, transcript: str) -> None:
@@ -307,7 +325,8 @@ class Summarizer:
                 return validate(parse_json(raw), schema)
             except InvalidAnswer as exc:
                 problem = str(exc)
-                log.warning("LLM, шаг %s, попытка %d: %s; ответ: %.200s", name, attempt, problem, raw)
+                log.warning("LLM, шаг %s, попытка %d: %s", name, attempt, problem)
+                log.debug("Ответ LLM целиком: %s", raw)
                 messages += [{"role": "assistant", "content": raw},
                              {"role": "user", "content": prompts.RETRY_HINT.format(problem=problem)}]
         raise InvalidAnswer(f"шаг «{name}»: {problem}")
@@ -330,8 +349,13 @@ class Summarizer:
             assessment = assess(facts["signals"], facts["status"], voice)
 
             started = time.time()
-            card = self._step("карточка", prompts.SUMMARY_SYSTEM, prompts.SUMMARY_USER.format(facts=compact(facts)),
-                              SUMMARY_SCHEMA, 700)
+            warning = None
+            try:
+                card = self._step("карточка", prompts.SUMMARY_SYSTEM, prompts.SUMMARY_USER.format(facts=compact(facts)),
+                                  SUMMARY_SCHEMA, 700)
+            except InvalidAnswer as exc:
+                log.warning("Карточка собрана из фактов без LLM: %s", exc)
+                card, warning = card_from_facts(facts), f"карточка собрана из фактов без LLM ({exc})"
             timing["summary"] = round(time.time() - started, 1)
         except LLMUnavailable as exc:
             log.warning("LLM недоступна: %s", exc)
@@ -344,7 +368,7 @@ class Summarizer:
         # угроза — главное в таком звонке: если модель не упомянула её в пересказе, дописываем сами
         if threat["value"] and not re.search(r"расторг|угрож|угроз|уйд|уход|жалоб", " ".join(sentences), re.IGNORECASE):
             sentences = sentences[:4] + [f"Клиент пригрозил: «{threat['quote']}»."]
-        return {**card, "summary": " ".join(sentences), **assessment, "facts": facts, "llm_seconds": timing}, None
+        return {**card, "summary": " ".join(sentences), **assessment, "facts": facts, "llm_seconds": timing}, warning
 
     def warmup(self) -> None:
         """Загрузить модель в память без генерации (пустой prompt в /api/generate)."""

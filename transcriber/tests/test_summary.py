@@ -177,6 +177,18 @@ def test_failed_facts_gives_null_not_error():
     assert summary is None and "факты" in warning
 
 
+def test_failed_card_falls_back_to_facts():
+    broken = dict(CARD, summary=["Сотрудник подключился.»", "«» «Касса.»] } topic", "Ждём."])
+    s, _ = make_summarizer([FACTS, dump(broken), dump(broken)])
+    summary, warning = s.summarize(TRANSCRIPT)
+    assert "из фактов" in warning
+    assert summary["topic"] == "Вторую неделю не приезжает инженер"
+    assert summary["next_step"] == "инженер перезвонит"
+    assert summary["summary"].startswith("Вторую неделю не приезжает инженер.")
+    # оценка считается по фактам и не теряется
+    assert summary["priority"] == "критический" and summary["tone"] == "негативный"
+
+
 def test_llm_unavailable_gives_null():
     s, _ = make_summarizer([LLMUnavailable("ConnectError")])
     summary, warning = s.summarize(TRANSCRIPT)
