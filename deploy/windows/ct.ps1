@@ -6,10 +6,12 @@
   deploy\windows\ct.ps1 restart | stop | start                службы (после правки .env — restart)
   deploy\windows\ct.ps1 fetch -Date 2026-10-26 -Limit 2 [-Dry]  скачать записи с АТС сейчас (-Dry — только список)
   deploy\windows\ct.ps1 job <call_id>                         результат звонка (call_id — имя файла без .mp3)
+  deploy\windows\ct.ps1 list [-Date 2026-10-28]               звонки за день: время, номер, приоритет, тон, тема
+  deploy\windows\ct.ps1 export [-Date 2026-10-28]             выгрузить звонки за день в txt (папка export\<дата>)
 #>
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("status", "logs", "restart", "stop", "start", "fetch", "job")]
+    [ValidateSet("status", "logs", "restart", "stop", "start", "fetch", "job", "list", "export")]
     [string]$Command = "status",
     [Parameter(Position = 1)][string]$Id,
     [string]$Date,
@@ -81,6 +83,15 @@ switch ($Command) {
         $r = Api POST "/ats/fetch?$query" 900
         $r.reports
         if ($r.files) { $(if ($Dry) { "К скачиванию:" } else { "Скачано:" }); $r.files | ForEach-Object { "  $_" } }
+    }
+    { $_ -in "list", "export" } {
+        # читает базу напрямую, без сервиса; вывод Python — в UTF-8, иначе кириллица ломается в конвейере
+        $env:PYTHONIOENCODING = "utf-8"
+        [Console]::OutputEncoding = [Text.Encoding]::UTF8
+        Push-Location $Root
+        try {
+            & "$Root\venv\Scripts\python.exe" "$Root\transcriber\scripts\report.py" $Command --date $(if ($Date) { $Date } else { "today" })
+        } finally { Pop-Location }
     }
     "job" {
         if (-not $Id) { throw "Укажите call_id: ct.ps1 job 26-10-26_09-02-47_..." }

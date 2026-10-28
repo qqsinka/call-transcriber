@@ -15,12 +15,12 @@ import torch
 from .audio import SAMPLE_RATE, load_channels
 from .config import Settings
 from .emotion import EmotionAnalyzer
+from .render import ROLE_LABELS, format_ts  # noqa: F401 — format_ts отсюда импортируют скрипты
 from .replacements import Replacer
 
 log = logging.getLogger(__name__)
 
 GIGAAM_LIMIT_S = 25.0
-ROLE_LABELS = {"client": "Клиент", "operator": "Оператор"}
 
 
 def split_long(segments: list[tuple[int, int]], max_len: int) -> list[tuple[int, int]]:
@@ -36,11 +36,6 @@ def split_long(segments: list[tuple[int, int]], max_len: int) -> list[tuple[int,
         for i in range(parts):
             out.append((start + int(i * step), start + int((i + 1) * step) if i < parts - 1 else end))
     return out
-
-
-def format_ts(ms: int) -> str:
-    sec = ms // 1000
-    return f"{sec // 60:02d}:{sec % 60:02d}"
 
 
 def merge_phrases(per_channel: list[list[dict]]) -> list[dict]:

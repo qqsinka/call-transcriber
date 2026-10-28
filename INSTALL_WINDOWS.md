@@ -123,6 +123,9 @@ dir inbox, inbox\done                                         # пусто — �
 | Задача | Команда |
 |---|---|
 | Состояние | `deploy\windows\ct.ps1 status` |
+| Звонки за день | `deploy\windows\ct.ps1 list -Date 2026-10-28` (без `-Date` — сегодня): время, номер, приоритет, тон, тема |
+| Выгрузить в txt | `deploy\windows\ct.ps1 export -Date 2026-10-28` — в `export\<дата>\`: `_список.txt` и файл на каждый звонок (карточка, эмоции, расшифровка). Там персональные данные — после просмотра удалить |
+| Результат одного звонка | `deploy\windows\ct.ps1 job <имя файла без .mp3>` |
 | Лог | `deploy\windows\ct.ps1 logs` (файлы — `logs\`) |
 | Перезапуск после правки `.env` | `deploy\windows\ct.ps1 restart` |
 | Остановить / запустить | `deploy\windows\ct.ps1 stop` / `start` |

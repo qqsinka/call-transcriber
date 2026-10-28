@@ -10,32 +10,12 @@ import torch
 
 from .audio import SAMPLE_RATE
 from .config import Settings
+from .render import LABELS_RU, describe  # noqa: F401 — describe отсюда импортируют worker и скрипты
 
 log = logging.getLogger(__name__)
 
 LABELS = ("angry", "sad", "neutral", "positive")
-LABELS_RU = {"angry": "злость", "sad": "грусть", "neutral": "нейтрально", "positive": "позитив"}
 TOP_N = 3
-CHANNEL_RU = {"client": "Клиент", "operator": "Оператор"}
-
-
-def format_ts(ms: int) -> str:
-    sec = ms // 1000
-    return f"{sec // 60:02d}:{sec % 60:02d}"
-
-
-def describe(emotion: dict) -> list[str]:
-    """Сводка эмоций по голосу текстом: для файлов результатов и как подсказка LLM при оценке звонка."""
-    lines = []
-    for channel, shares in emotion["by_channel"].items():
-        who = "" if channel == "mono" else f" ({CHANNEL_RU.get(channel, channel)})"
-        lines.append(f"Эмоции по голосу{who}: " + ", ".join(f"{LABELS_RU[k]} {v:.0%}" for k, v in shares.items()))
-    for key, title in (("top_angry", "Злость"), ("top_positive", "Позитив")):
-        items = emotion[key]
-        lines.append(f"{title} (p>=0.5): " + ("; ".join(f"[{format_ts(x['start_ms'])}] {x['p']:.2f} «{x['text'][:60]}»"
-                                                         for x in items) if items else "нет"))
-    lines.append(f"Оценено фраз: {emotion['phrases_scored']} из {emotion['phrases_total']} (короткие реплики не оцениваются)")
-    return lines
 
 
 class EmotionAnalyzer:

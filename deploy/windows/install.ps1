@@ -259,7 +259,10 @@ if (Step 5 "Настройки .env") {
             LLM_URL = "http://127.0.0.1:11434"; AUTH_PASSWORD = $password
         }
         $lines = [IO.File]::ReadAllLines("$Root\.env.example", $Utf8) | ForEach-Object {
-            if ($_ -match '^([A-Z_]+)=' -and $set.ContainsKey($Matches[1])) { "$($Matches[1])=$($set[$Matches[1]])" } else { $_ }
+            if ($_ -match '^([A-Z_]+)=' -and $set.ContainsKey($Matches[1])) { "$($Matches[1])=$($set[$Matches[1]])" }
+            # TZ — только для Docker; на Windows часовой пояс берётся из системы
+            elseif ($_ -match '^TZ=') { "# $_ (не нужен на Windows)" }
+            else { $_ }
         }
         [IO.File]::WriteAllLines($EnvFile, [string[]]$lines, $Utf8)
         # пароли в файле: читать только администраторам и службам (SYSTEM)

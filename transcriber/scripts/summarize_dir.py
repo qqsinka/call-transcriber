@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.config import Settings  # noqa: E402
+from app.render import summary_lines  # noqa: E402
 from app.replacements import Replacer  # noqa: E402
 from app.summary import LLMUnavailable, Summarizer  # noqa: E402
 
@@ -48,26 +49,7 @@ def render(name: str, summary: dict | None, warning: str | None, model: str, too
         tail += ["", f"Предупреждение: {warning}"]
     if not summary:
         return "\n".join(head + [f"САММАРИ НЕ ПОСТРОЕНО: {warning}"] + tail) + "\n"
-    facts = summary.get("facts") or {}
-    caller = ", ".join(x for x in (facts.get("caller") or {}).values() if x)
-    body = [
-        f"Тема: {summary['topic']}",
-        f"Клиент: {caller or '—'}",
-        f"Суть обращения: {summary['problem']}",
-        f"Итог: {summary['result']}",
-        f"Следующий шаг: {summary['next_step'] or '—'}",
-    ]
-    if summary.get("priority"):
-        body += [
-            f"Приоритет: {summary['priority']} — {summary['priority_reason']}",
-            f"Оценка негатива: {summary['negative_score']}/10",
-            f"Тон клиента (по смыслу): {summary['tone']} — {summary['tone_reason']}",
-            f"Риски: {'; '.join(summary['risks']) or 'нет'}",
-        ]
-    body += ["", "Саммари:", summary["summary"]]
-    if facts.get("details"):
-        body += ["", "Детали: " + "; ".join(facts["details"])]
-    return "\n".join(head + body + tail) + "\n"
+    return "\n".join(head + summary_lines(summary) + tail) + "\n"
 
 
 def main() -> None:

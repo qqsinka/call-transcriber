@@ -23,3 +23,7 @@ models/
 __pycache__/
 *.pyc
 dump/
+# выгрузки звонков (ct.ps1 export) — персональные данные
+export/
+# архив кода для переноса на сервер (git archive)
+call-transcriber.zip

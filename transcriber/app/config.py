@@ -6,6 +6,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
+if os.name == "nt":
+    # TZ=Europe/Moscow — для Docker/Linux; Windows такой формат не понимает и молча считает время по UTC
+    # (расписание съезжает на часы). Часовой пояс на Windows берётся из системы.
+    os.environ.pop("TZ", None)
 
 DEFAULT_LLM_MODEL = "hf.co/ai-sage/GigaChat3.1-10B-A1.8B-GGUF:Q4_K_M"
 
