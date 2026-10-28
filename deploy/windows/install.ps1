@@ -87,6 +87,8 @@ function Wait-Http($url, $seconds, $what) {
 
 # Служба через WinSW: services\<id>.exe + services\<id>.xml. Уже установленная — останавливается
 # и запускается с новым xml (путь к exe тот же, переустанавливать не нужно).
+# Приоритет ниже обычного (наследуют и дочерние процессы, в т.ч. llama-server): на сервере с 1С и SQL
+# процессор в первую очередь достаётся им, распознавание и LLM берут свободное время.
 function Install-Service($id, $name, $description, $exe, $arguments, [hashtable]$envs, $depend) {
     $base = "$Svc\$id"
     $esc = { param($s) [Security.SecurityElement]::Escape([string]$s) }
@@ -102,6 +104,7 @@ function Install-Service($id, $name, $description, $exe, $arguments, [hashtable]
   <arguments>$(& $esc $arguments)</arguments>
   <workingdirectory>$(& $esc $Root)</workingdirectory>
   <startmode>Automatic</startmode>
+  <priority>BelowNormal</priority>
 $dependXml
 $envXml
   <onfailure action="restart" delay="10 sec"/>
